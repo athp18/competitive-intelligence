@@ -60,6 +60,9 @@ cd frontend && npm run dev
 
 # Celery worker (needs both queues)
 celery -A tasks.celery_app worker -Q crawl,llm --loglevel=info
+
+# Celery beat scheduler (triggers periodic crawls)
+celery -A tasks.celery_app beat --loglevel=info
 ```
 
 ## Adding a target
