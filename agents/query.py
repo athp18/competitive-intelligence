@@ -1,71 +1,75 @@
-"""Query Agent: ReAct-style NL query over the knowledge base (Sonnet)."""
+"""Query Agent: orchestrates SemanticSearchAgent, SQLAgent, and SummaryAgent."""
 import json
 from dataclasses import dataclass, field
 from uuid import UUID
 
 import structlog
 
-from core.embeddings import embed
 from core.llm import LLMClient, MODEL_SONNET
 from db.models import get_session_factory
-from db.queries import find_targets_by_name, get_latest_report, list_signals, semantic_search
+from db.queries import find_targets_by_name, get_latest_report
+from agents.subagents import SemanticSearchAgent, SQLAgent, SummaryAgent
 
 log = structlog.get_logger()
 
-MAX_ITERATIONS = 5
+MAX_ITERATIONS = 6
 
 SYSTEM_PROMPT = """\
-You are an intelligence analyst. Your job is to answer questions strictly from the signals \
-in the database. Use the available tools to retrieve relevant data before answering.
+You are an intelligence orchestrator. Your job is to answer a user's question by delegating to \
+specialized retrieval agents and then synthesizing their results.
+
+Available tools:
+- resolve_target: always call this first when the user mentions a company, person, or topic by \
+  name — you need the UUID to pass to retrieval agents.
+- invoke_semantic_search: best for open-ended concept queries ("what is X doing with Y", \
+  "recent activity around Z"). Pass the original query and the resolved target_id.
+- invoke_sql_lookup: best for structured or filtered queries ("hiring signals past 30 days", \
+  "high-relevance product signals"). Pass the original query and the resolved target_id.
+- get_report: fetch a pre-generated analysis report for a target.
 
 Rules:
-- When the user mentions a company, person, or topic by name, call resolve_target first to \
-get the UUID. Use that UUID in all subsequent tool calls.
-- Only report what the database contains. Do not supplement with general knowledge, \
-training data, or anything not returned by a tool call.
-- If the database has little or no data on a topic, say so plainly. Do not fill the gap \
-with what you know about the subject from outside the database.
-- Never speculate, infer, or extrapolate beyond what the signals explicitly state.
+- When the user mentions a name, call resolve_target first.
+- For most queries, call both invoke_semantic_search and invoke_sql_lookup to maximize coverage.
+- Never answer from your own knowledge — only from tool results.
+- If the retrieved data is sparse, say so plainly.
 - Do not use emojis unless the user explicitly asks for them.
 """
 
 TOOLS = [
     {
         "name": "resolve_target",
-        "description": "Look up a target by name. Always call this first when the user mentions a company, person, or topic by name — you need the UUID to query signals.",
+        "description": "Look up a target by name. Always call this first when the user mentions a company, person, or topic by name.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "The target name to search for, e.g. 'New York Times'"},
+                "name": {"type": "string", "description": "The target name to search for"},
             },
             "required": ["name"],
         },
     },
     {
-        "name": "semantic_search",
-        "description": "Search signals using semantic similarity. Use for open-ended or concept queries.",
+        "name": "invoke_semantic_search",
+        "description": "Run a semantic similarity search over signals. Best for open-ended or concept queries.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
+                "query": {"type": "string", "description": "The search query"},
+                "target_id": {"type": "string", "format": "uuid", "description": "UUID of the target"},
                 "top_k": {"type": "integer", "default": 10},
-                "target_id": {"type": "string", "format": "uuid", "description": "UUID of the target (e.g. '550e8400-e29b-41d4-a716-446655440000'). Must be a valid UUID, not a name."},
             },
             "required": ["query"],
         },
     },
     {
-        "name": "sql_query",
-        "description": "Structured lookup of signals by target, date range, or signal type.",
+        "name": "invoke_sql_lookup",
+        "description": "Run a structured SQL lookup of signals. Best for filtered queries (by type, date range, or relevance).",
         "input_schema": {
             "type": "object",
             "properties": {
-                "target_id": {"type": "string"},
-                "signal_type": {"type": "string", "enum": ["hiring", "research", "product", "funding", "mention"]},
-                "days": {"type": "integer", "description": "Look back N days"},
-                "relevance": {"type": "string", "enum": ["high", "medium", "low"]},
-                "limit": {"type": "integer", "default": 20},
+                "query": {"type": "string", "description": "Natural language description of what to filter for"},
+                "target_id": {"type": "string", "format": "uuid", "description": "UUID of the target"},
             },
+            "required": ["query"],
         },
     },
     {
@@ -80,18 +84,6 @@ TOOLS = [
             "required": ["target_id", "report_type"],
         },
     },
-    {
-        "name": "trigger_compare",
-        "description": "Trigger a head-to-head comparison between two targets.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "target_a_id": {"type": "string"},
-                "target_b_id": {"type": "string"},
-            },
-            "required": ["target_a_id", "target_b_id"],
-        },
-    },
 ]
 
 
@@ -103,10 +95,12 @@ class QueryResult:
 
 
 class QueryAgent:
+    """Orchestrator: routes queries to specialized subagents, synthesizes with SummaryAgent."""
+
     def __init__(self):
         self.llm = LLMClient()
-        self._tool_results: list[str] = []
-    
+        self._gathered_signals: list[dict] = []
+
     def _parse_uuid(self, value: str | None, field: str = "target_id") -> UUID | None:
         if not value:
             return None
@@ -114,38 +108,36 @@ class QueryAgent:
             return UUID(value)
         except ValueError:
             log.warning("invalid_uuid_from_model", field=field, value=value)
-            return None  # or raise a ToolInputError if you want the agent to retry
+            return None
 
     async def run(self, query: str) -> QueryResult:
         messages = [{"role": "user", "content": query}]
         iterations = 0
+        response = None
 
         for i in range(MAX_ITERATIONS):
             iterations = i + 1
             response = await self.llm.call(
                 messages=messages,
-                prompt="",  # unused when messages provided
+                prompt="",
                 model=MODEL_SONNET,
-                caller=f"query_agent:iteration_{i}",
+                caller=f"query_orchestrator:iteration_{i}",
                 system=SYSTEM_PROMPT,
                 tools=TOOLS,
                 tool_choice={"type": "auto"},
                 max_tokens=2048,
             )
 
-            # Append assistant turn
             messages.append({"role": "assistant", "content": response.content})
 
             if response.stop_reason == "end_turn":
                 break
 
             if response.stop_reason == "tool_use":
-                # Execute all tool calls and add results
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":
-                        result = await self._dispatch_tool(block.name, block.input)
-                        self._tool_results.append(str(result)[:500])
+                        result = await self._dispatch(block.name, block.input)
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
@@ -153,22 +145,28 @@ class QueryAgent:
                         })
                 messages.append({"role": "user", "content": tool_results})
         else:
-            log.warning("query_agent_hit_max_iterations", query=query)
+            log.warning("query_orchestrator_hit_max_iterations", query=query)
 
-        # Extract final text answer
-        answer = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                answer = block.text
-                break
+        # Synthesize gathered signals into a final answer via SummaryAgent
+        if self._gathered_signals:
+            answer = await SummaryAgent().run(query, self._gathered_signals)
+        else:
+            # Fall back to whatever text the orchestrator produced
+            answer = ""
+            if response:
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        answer = block.text
+                        break
+            answer = answer or "No relevant signals found in the database for this query."
 
         return QueryResult(
-            answer=answer or "I was unable to find relevant information.",
-            sources=self._tool_results,
+            answer=answer,
+            sources=self._gathered_signals[:5],
             iterations=iterations,
         )
 
-    async def _dispatch_tool(self, name: str, inputs: dict) -> object:
+    async def _dispatch(self, name: str, inputs: dict) -> object:
         session_factory = get_session_factory()
 
         if name == "resolve_target":
@@ -178,46 +176,34 @@ class QueryAgent:
                 return {"error": f"No target found matching '{inputs['name']}'. It may not be tracked yet."}
             return [{"id": str(t.id), "name": t.name, "type": t.type} for t in targets]
 
-        if name == "semantic_search":
-            embedding = await embed(inputs["query"])
+        if name == "invoke_semantic_search":
             target_id = self._parse_uuid(inputs.get("target_id"))
-            async with session_factory() as session:
-                signals = await semantic_search(
-                    session, embedding, top_k=inputs.get("top_k", 10), target_id=target_id
-                )
-            return [
-                {"summary": s.summary, "type": s.signal_type, "date": str(s.signal_date), "source": s.source}
-                for s in signals
-            ]
+            signals = await SemanticSearchAgent().run(
+                query=inputs["query"],
+                target_id=target_id,
+                top_k=inputs.get("top_k", 10),
+            )
+            self._gathered_signals.extend(signals)
+            log.info("semantic_search_agent_done", signal_count=len(signals))
+            return {"signals_found": len(signals), "preview": signals[:3]}
 
-        if name == "sql_query":
+        if name == "invoke_sql_lookup":
             target_id = self._parse_uuid(inputs.get("target_id"))
-            async with session_factory() as session:
-                signals = await list_signals(
-                    session,
-                    target_id=target_id,
-                    signal_type=inputs.get("signal_type"),
-                    relevance=inputs.get("relevance"),
-                    days=inputs.get("days"),
-                    limit=inputs.get("limit", 20),
-                )
-            return [
-                {"summary": s.summary, "type": s.signal_type, "date": str(s.signal_date), "relevance": s.relevance}
-                for s in signals
-            ]
+            signals = await SQLAgent().run(
+                query=inputs["query"],
+                target_id=target_id,
+            )
+            # Deduplicate by summary before extending
+            existing = {s["summary"] for s in self._gathered_signals}
+            new_signals = [s for s in signals if s["summary"] not in existing]
+            self._gathered_signals.extend(new_signals)
+            log.info("sql_agent_done", signal_count=len(signals), new=len(new_signals))
+            return {"signals_found": len(signals), "preview": signals[:3]}
 
         if name == "get_report":
             target_id = self._parse_uuid(inputs.get("target_id"))
             async with session_factory() as session:
                 report = await get_latest_report(session, target_id, inputs["report_type"])
             return {"content": report.content if report else None}
-
-        if name == "trigger_compare":
-            from tasks.analyze import run_compare_task
-            run_compare_task.apply_async(
-                args=[inputs["target_a_id"], inputs["target_b_id"]],
-                queue="llm",
-            )
-            return {"status": "comparison triggered"}
 
         return {"error": f"unknown tool: {name}"}
