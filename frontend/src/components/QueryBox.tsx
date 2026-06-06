@@ -67,7 +67,9 @@ export function QueryBox() {
           {!collapsed && (
             <div className="p-4 text-sm text-white/70 leading-relaxed prose prose-invert prose-sm max-w-none
               prose-headings:text-white prose-headings:font-semibold
-              prose-h3:text-sm prose-h3:mt-3 prose-h3:mb-1
+              prose-h1:text-xl prose-h1:mt-0 prose-h1:mb-2
+              prose-h2:text-lg prose-h2:mt-0 prose-h2:mb-2
+              prose-h3:text-base prose-h3:mt-3 prose-h3:mb-1
               prose-p:text-white/70 prose-p:my-1
               prose-strong:text-white/90
               prose-ul:my-1 prose-li:my-0.5 prose-li:text-white/70
