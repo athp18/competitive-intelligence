@@ -3,7 +3,7 @@ from datetime import date, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import Alert, Report, Run, Signal, Target
@@ -51,6 +51,12 @@ async def update_target(session: AsyncSession, target_id: UUID, data: dict) -> T
 
 
 # --- Signals ---
+
+async def delete_signals_for_target(session: AsyncSession, target_id: UUID) -> int:
+    result = await session.execute(delete(Signal).where(Signal.target_id == target_id))
+    await session.commit()
+    return result.rowcount
+
 
 async def signal_exists(session: AsyncSession, raw_hash: str) -> bool:
     result = await session.execute(

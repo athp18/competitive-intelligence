@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_db, verify_api_key
-from db.queries import create_target, get_target, list_targets, list_signals, update_target
+from db.queries import create_target, delete_signals_for_target, get_target, list_targets, list_signals, update_target
 
 router = APIRouter(prefix="/targets", tags=["targets"])
 
@@ -89,6 +89,7 @@ async def deactivate(target_id: UUID, db: AsyncSession = Depends(get_db)):
     if not existing:
         raise HTTPException(status_code=404, detail="Target not found")
     await update_target(db, target_id, {"active": False})
+    await delete_signals_for_target(db, target_id)
     # Flush extraction cache so signals are re-extracted if target is recreated
     try:
         import redis.asyncio as aioredis
