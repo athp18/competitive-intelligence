@@ -89,6 +89,17 @@ async def deactivate(target_id: UUID, db: AsyncSession = Depends(get_db)):
     if not existing:
         raise HTTPException(status_code=404, detail="Target not found")
     await update_target(db, target_id, {"active": False})
+    # Flush extraction cache so signals are re-extracted if target is recreated
+    try:
+        import redis.asyncio as aioredis
+        from core.config import get_settings
+        r = aioredis.from_url(get_settings().redis_url, decode_responses=True)
+        keys = await r.keys("extraction:*")
+        if keys:
+            await r.delete(*keys)
+        await r.aclose()
+    except Exception:
+        pass
     return {"status": "deactivated"}
 
 
