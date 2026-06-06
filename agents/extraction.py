@@ -45,13 +45,17 @@ def _content_key(text: str) -> str:
     return "extraction:" + hashlib.sha256(text.encode()).hexdigest()
 
 
-def _parse_date(value: str | None) -> str | None:
-    """Return a YYYY-MM-DD string or None. Rejects partial dates like '2026-05'."""
+def _parse_date(value: str | None):
+    """Return a datetime.date or None. Rejects partial dates like '2026-05'."""
     if not value:
         return None
     import re
+    from datetime import date
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(value)):
-        return value
+        try:
+            return date.fromisoformat(str(value))
+        except ValueError:
+            return None
     return None
 
 
