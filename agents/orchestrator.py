@@ -62,8 +62,8 @@ class Orchestrator:
 
         return run_ids
 
-    async def spawn_single(self, target_id: UUID, source: str | None = None) -> list[UUID]:
-        """Manually trigger crawl for a specific target."""
+    async def spawn_single(self, target_id: UUID, source: str | None = None, deep: bool = True) -> list[UUID]:
+        """Manually trigger crawl for a specific target. Always deep by default."""
         from tasks.crawl import crawl_target
 
         session_factory = get_session_factory()
@@ -89,7 +89,7 @@ class Orchestrator:
                 })
                 run_ids.append(run.id)
                 crawl_target.apply_async(
-                    args=[str(target.id), str(run.id), src],
+                    args=[str(target.id), str(run.id), src, deep],
                     queue="crawl",
                 )
 

@@ -25,7 +25,7 @@ class ArXivSubAgent(BaseScraperAgent):
                 ARXIV_API,
                 params={
                     "search_query": query,
-                    "max_results": config.get("max_results", 10),
+                    "max_results": config.get("max_results", 50 if config.get("_initial") else 10),
                     "sortBy": "submittedDate",
                     "sortOrder": "descending",
                 },

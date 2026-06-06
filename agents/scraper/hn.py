@@ -16,22 +16,24 @@ class HNSubAgent(BaseScraperAgent):
     async def fetch(self, config: dict) -> list[dict]:
         """config keys: query (str), include_hiring (bool)."""
         query = config.get("query", "")
+        initial = config.get("_initial", False)
+        limit = 200 if initial else 20
         items: list[dict] = []
 
         if query:
-            items += await self._search(query)
+            items += await self._search(query, limit=limit)
 
         if config.get("include_hiring", False):
             items += await self._fetch_hiring(query)
 
         return items
 
-    async def _search(self, query: str) -> list[dict]:
+    async def _search(self, query: str, limit: int = 20) -> list[dict]:
         items: list[dict] = []
         try:
             resp = await self.get(
                 f"{ALGOLIA_API}/search",
-                params={"query": query, "tags": "story", "hitsPerPage": 20},
+                params={"query": query, "tags": "story", "hitsPerPage": limit},
             )
             for hit in resp.json().get("hits", []):
                 items.append({

@@ -20,6 +20,7 @@ class GoogleNewsSubAgent(BaseScraperAgent):
         if not query:
             return []
 
+        initial = config.get("_initial", False)
         items: list[dict] = []
         try:
             resp = await self.get(RSS_URL, params={
@@ -27,13 +28,14 @@ class GoogleNewsSubAgent(BaseScraperAgent):
                 "hl": "en-US",
                 "gl": "US",
                 "ceid": "US:en",
+                "tbs": "qdr:m" if initial else "qdr:w",
             })
             root = ET.fromstring(resp.text)
             channel = root.find("channel")
             if channel is None:
                 return []
 
-            limit = config.get("limit", 20)
+            limit = config.get("limit", 50 if initial else 20)
             for item in channel.findall("item")[:limit]:
                 title = item.findtext("title") or ""
                 link = item.findtext("link") or ""

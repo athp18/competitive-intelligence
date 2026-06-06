@@ -20,26 +20,26 @@ class GitHubSubAgent(BaseScraperAgent):
         return h
 
     async def fetch(self, config: dict) -> list[dict]:
-        """config keys: repo (str) or org (str)."""
+        """config keys: org (str) or repo (str), _initial (bool)."""
         results: list[dict] = []
         headers = await self._headers()
+        initial = config.get("_initial", False)
 
         repo = config.get("repo")
         org = config.get("org")
 
-        if repo:
-            results += await self._fetch_repo(repo, headers)
-        elif org:
-            results += await self._fetch_org(org, headers)
+        if org:
+            results += await self._fetch_org(org, headers, deep=initial)
+        elif repo:
+            results += await self._fetch_repo(repo, headers, commits=100 if initial else 20)
 
         return results
 
-    async def _fetch_repo(self, repo: str, headers: dict) -> list[dict]:
+    async def _fetch_repo(self, repo: str, headers: dict, commits: int = 20) -> list[dict]:
         items: list[dict] = []
 
-        # Releases
         try:
-            resp = await self.get(f"{GH_API}/repos/{repo}/releases", headers=headers, params={"per_page": 10})
+            resp = await self.get(f"{GH_API}/repos/{repo}/releases", headers=headers, params={"per_page": 20})
             for r in resp.json():
                 items.append({
                     "type": "release",
@@ -52,9 +52,8 @@ class GitHubSubAgent(BaseScraperAgent):
         except Exception as e:
             log.warning("github_releases_failed", repo=repo, error=str(e))
 
-        # Recent commits (default branch)
         try:
-            resp = await self.get(f"{GH_API}/repos/{repo}/commits", headers=headers, params={"per_page": 20})
+            resp = await self.get(f"{GH_API}/repos/{repo}/commits", headers=headers, params={"per_page": commits})
             for c in resp.json():
                 commit = c.get("commit", {})
                 items.append({
@@ -67,7 +66,6 @@ class GitHubSubAgent(BaseScraperAgent):
         except Exception as e:
             log.warning("github_commits_failed", repo=repo, error=str(e))
 
-        # Repo metadata (stars, forks)
         try:
             resp = await self.get(f"{GH_API}/repos/{repo}", headers=headers)
             meta = resp.json()
@@ -85,11 +83,15 @@ class GitHubSubAgent(BaseScraperAgent):
 
         return items
 
-    async def _fetch_org(self, org: str, headers: dict) -> list[dict]:
+    async def _fetch_org(self, org: str, headers: dict, deep: bool = False) -> list[dict]:
         items: list[dict] = []
         try:
-            resp = await self.get(f"{GH_API}/orgs/{org}/repos", headers=headers, params={"per_page": 10, "sort": "updated"})
-            for r in resp.json():
+            per_page = 30 if deep else 10
+            resp = await self.get(f"{GH_API}/orgs/{org}/repos", headers=headers, params={"per_page": per_page, "sort": "updated"})
+            repos = resp.json()
+            if not isinstance(repos, list):
+                return []
+            for r in repos:
                 items.append({
                     "type": "org_repo",
                     "title": r.get("full_name", ""),
@@ -98,6 +100,13 @@ class GitHubSubAgent(BaseScraperAgent):
                     "stars": r.get("stargazers_count", 0),
                     "org": org,
                 })
+            # On deep crawl, also fetch commits from top 5 repos by stars
+            if deep:
+                top_repos = sorted(repos, key=lambda r: r.get("stargazers_count", 0), reverse=True)[:5]
+                for r in top_repos:
+                    full_name = r.get("full_name", "")
+                    if full_name:
+                        items += await self._fetch_repo(full_name, headers, commits=50)
         except Exception as e:
             log.warning("github_org_failed", org=org, error=str(e))
         return items

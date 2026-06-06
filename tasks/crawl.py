@@ -29,13 +29,13 @@ def _import_scraper(dotted_path: str):
 
 
 @app.task(name="tasks.crawl.crawl_target", bind=True, max_retries=3)
-def crawl_target(self, target_id: str, run_id: str, source: str) -> None:
+def crawl_target(self, target_id: str, run_id: str, source: str, deep: bool = False) -> None:
     asyncio.get_event_loop().run_until_complete(
-        _crawl_target_async(target_id, run_id, source)
+        _crawl_target_async(target_id, run_id, source, deep)
     )
 
 
-async def _crawl_target_async(target_id: str, run_id: str, source: str) -> None:
+async def _crawl_target_async(target_id: str, run_id: str, source: str, deep: bool = False) -> None:
     from db.models import get_session_factory
     from db.queries import get_target, update_run
 
@@ -60,6 +60,7 @@ async def _crawl_target_async(target_id: str, run_id: str, source: str) -> None:
             **(target.sources or {}).get(source, {}),
             "_target_id": str(target.id),
             "_target_name": target.name,
+            "_initial": deep,
         }
         raw_items = await scraper.fetch(source_config)
         await scraper.close()
