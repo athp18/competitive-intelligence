@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
 
 interface Signal {
@@ -58,7 +60,17 @@ export function SignalFeed({ targetId }: Props) {
       {latestDigest && (
         <div className="border border-white/[0.06] rounded-lg p-4">
           <p className="text-xs text-white/30 mb-2">Weekly digest &middot; {new Date(latestDigest.created_at).toLocaleDateString()}</p>
-          <p className="text-sm text-white/70 leading-relaxed">{latestDigest.content}</p>
+          <div className="text-sm text-white/70 leading-relaxed prose prose-invert prose-sm max-w-none
+            prose-headings:text-white prose-headings:font-semibold
+            prose-h1:text-xl prose-h1:mt-0 prose-h1:mb-2
+            prose-h2:text-lg prose-h2:mt-0 prose-h2:mb-2
+            prose-h3:text-base prose-h3:mt-3 prose-h3:mb-1
+            prose-p:text-white/70 prose-p:my-1
+            prose-strong:text-white/90
+            prose-ul:my-1 prose-li:my-0.5 prose-li:text-white/70
+            prose-ol:my-1">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{latestDigest.content}</ReactMarkdown>
+          </div>
         </div>
       )}
 
