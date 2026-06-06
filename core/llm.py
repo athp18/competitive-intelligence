@@ -115,9 +115,12 @@ class LLMClient:
 
     def extract_json(self, response: anthropic.types.Message) -> Any:
         text = self.extract_text(response)
-        # Strip markdown code fences if present
         if "```" in text:
             lines = text.split("\n")
             inner = [l for l in lines if not l.strip().startswith("```")]
             text = "\n".join(inner)
-        return json.loads(text.strip())
+        text = text.strip()
+        # Use raw_decode to tolerate trailing content after the first JSON value
+        decoder = json.JSONDecoder()
+        value, _ = decoder.raw_decode(text)
+        return value

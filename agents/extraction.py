@@ -45,6 +45,16 @@ def _content_key(text: str) -> str:
     return "extraction:" + hashlib.sha256(text.encode()).hexdigest()
 
 
+def _parse_date(value: str | None) -> str | None:
+    """Return a YYYY-MM-DD string or None. Rejects partial dates like '2026-05'."""
+    if not value:
+        return None
+    import re
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(value)):
+        return value
+    return None
+
+
 def _item_to_text(item: dict) -> str:
     """Convert raw scraped item to stripped plain text for LLM."""
     parts = []
@@ -113,7 +123,7 @@ class ExtractionAgent:
                     item.get("title", ""), item.get("url", "")
                 )
                 sig["signal_type"] = sig.pop("type", "mention")
-                sig["signal_date"] = sig.pop("date", None)
+                sig["signal_date"] = _parse_date(sig.pop("date", None))
                 sig["metadata_"] = {"source_item": item.get("title", "")[:200]}
                 all_signals.append(sig)
 
