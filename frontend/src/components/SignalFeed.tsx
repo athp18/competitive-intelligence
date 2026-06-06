@@ -119,7 +119,7 @@ export function SignalFeed({ targetId, allTargets }: Props) {
     }
   }
 
-  const otherTargets = allTargets.filter((t) => t.id !== targetId);
+  const otherTargets = (allTargets ?? []).filter((t) => t.id !== targetId);
 
   return (
     <div className="space-y-5">
