@@ -51,6 +51,13 @@ export default function Home() {
                   target={t}
                   selected={selectedTarget === t.id}
                   onClick={() => setSelectedTarget(t.id)}
+                  onUpdated={(updated) =>
+                    setTargets((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+                  }
+                  onDeleted={(id) => {
+                    setTargets((prev) => prev.filter((x) => x.id !== id));
+                    if (selectedTarget === id) setSelectedTarget(targets.find((x) => x.id !== id)?.id ?? null);
+                  }}
                 />
               ))
             )}
@@ -60,7 +67,7 @@ export default function Home() {
 
         <div className="lg:col-span-3">
           {selectedTarget ? (
-            <SignalFeed targetId={selectedTarget} />
+            <SignalFeed targetId={selectedTarget} allTargets={targets} />
           ) : (
             <div className="text-white/20 text-sm py-12 text-center">
               Select a target to view signals.

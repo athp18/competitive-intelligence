@@ -33,4 +33,10 @@ export const api = {
     apiFetch("/query", { method: "POST", body: JSON.stringify({ q }) }),
   createTarget: (data: object) =>
     apiFetch("/targets", { method: "POST", body: JSON.stringify(data) }),
+  updateTarget: (id: string, data: object) =>
+    apiFetch(`/targets/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteTarget: (id: string) =>
+    apiFetch(`/targets/${id}`, { method: "DELETE" }),
+  compareTargets: (id: string, otherId: string) =>
+    apiFetch(`/targets/${id}/compare/${otherId}`, { method: "POST" }),
 };
