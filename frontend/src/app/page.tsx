@@ -83,27 +83,31 @@ function AddTargetForm({ onAdded }: { onAdded: (t: any) => void }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState("company");
-  const [ghRepo, setGhRepo] = useState("");
-  const [ghSlug, setGhSlug] = useState("");
-  const [newsQuery, setNewsQuery] = useState("");
+  const [ghOrg, setGhOrg] = useState("");
+  const [jobSlug, setJobSlug] = useState("");
+  const [domain, setDomain] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const sources: Record<string, object> = {};
-      if (ghRepo) sources.github = { repo: ghRepo };
-      if (ghSlug) {
-        sources.greenhouse = { slug: ghSlug };
-        sources.lever = { slug: ghSlug };
+      const sources: Record<string, object> = {
+        hn: { query: name, include_hiring: true },
+        news: { query: name },
+        googlenews: { query: name },
+      };
+      if (ghOrg) sources.github = { org: ghOrg };
+      if (jobSlug) {
+        sources.greenhouse = { slug: jobSlug };
+        sources.lever = { slug: jobSlug };
       }
-      sources.news = { query: newsQuery || name };
-      sources.hn = { query: name, include_hiring: true };
+      if (domain) sources.careers = { domain };
 
-      const schedule: Record<string, string> = { hn: "6h", news: "6h" };
-      if (ghRepo) schedule.github = "daily";
-      if (ghSlug) { schedule.greenhouse = "daily"; schedule.lever = "daily"; }
+      const schedule: Record<string, string> = { hn: "6h", news: "6h", googlenews: "6h" };
+      if (ghOrg) schedule.github = "daily";
+      if (jobSlug) { schedule.greenhouse = "daily"; schedule.lever = "daily"; }
+      if (domain) schedule.careers = "daily";
 
       const target = await api.createTarget({ name, type, sources, schedule, aliases: [] });
       onAdded(target);
@@ -150,15 +154,21 @@ function AddTargetForm({ onAdded }: { onAdded: (t: any) => void }) {
         <option value="repo">Repository</option>
       </select>
       <input
-        placeholder="GitHub repo (optional)"
-        value={ghRepo}
-        onChange={(e) => setGhRepo(e.target.value)}
+        placeholder="GitHub org (optional)"
+        value={ghOrg}
+        onChange={(e) => setGhOrg(e.target.value)}
         className={inputClass}
       />
       <input
-        placeholder="Jobs slug — Greenhouse / Lever (optional)"
-        value={ghSlug}
-        onChange={(e) => setGhSlug(e.target.value)}
+        placeholder="Domain for careers page (e.g. rivian.com)"
+        value={domain}
+        onChange={(e) => setDomain(e.target.value)}
+        className={inputClass}
+      />
+      <input
+        placeholder="Greenhouse / Lever slug (optional)"
+        value={jobSlug}
+        onChange={(e) => setJobSlug(e.target.value)}
         className={inputClass}
       />
       <div className="flex gap-2 pt-1">
