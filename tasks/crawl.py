@@ -13,9 +13,11 @@ SCRAPER_MAP = {
     "github": "agents.scraper.github.GitHubSubAgent",
     "hn": "agents.scraper.hn.HNSubAgent",
     "news": "agents.scraper.news.NewsSubAgent",
+    "googlenews": "agents.scraper.googlenews.GoogleNewsSubAgent",
     "greenhouse": "agents.scraper.greenhouse.GreenhouseSubAgent",
     "lever": "agents.scraper.lever.LeverSubAgent",
     "arxiv": "agents.scraper.arxiv.ArXivSubAgent",
+    "careers": "agents.scraper.careers.CareersSubAgent",
 }
 
 
@@ -54,7 +56,11 @@ async def _crawl_target_async(target_id: str, run_id: str, source: str) -> None:
         ScraperClass = _import_scraper(scraper_path)
         scraper = ScraperClass()
 
-        source_config = (target.sources or {}).get(source, {})
+        source_config = {
+            **(target.sources or {}).get(source, {}),
+            "_target_id": str(target.id),
+            "_target_name": target.name,
+        }
         raw_items = await scraper.fetch(source_config)
         await scraper.close()
 

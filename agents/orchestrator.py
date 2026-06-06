@@ -15,7 +15,9 @@ SOURCE_CADENCE = {
     "arxiv": "daily",
     "greenhouse": "daily",
     "lever": "daily",
+    "careers": "daily",
     "news": "6h",
+    "googlenews": "6h",
     "hn": "6h",
     "reddit": "12h",
 }

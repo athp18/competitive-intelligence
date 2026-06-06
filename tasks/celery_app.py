@@ -37,10 +37,20 @@ app.conf.update(
             "schedule": crontab(minute=0, hour="*/6"),
             "args": ["news"],
         },
+        "crawl-googlenews-6h": {
+            "task": "tasks.crawl.crawl_all",
+            "schedule": crontab(minute=15, hour="*/6"),
+            "args": ["googlenews"],
+        },
         "crawl-hn-6h": {
             "task": "tasks.crawl.crawl_all",
             "schedule": crontab(minute=30, hour="*/6"),
             "args": ["hn"],
+        },
+        "crawl-careers-daily": {
+            "task": "tasks.crawl.crawl_all",
+            "schedule": crontab(hour=3, minute=0),
+            "args": ["careers"],
         },
         "crawl-github-daily": {
             "task": "tasks.crawl.crawl_all",
