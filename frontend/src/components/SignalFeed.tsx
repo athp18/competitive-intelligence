@@ -153,31 +153,55 @@ export function SignalFeed({ targetId, allTargets }: Props) {
                   <tr className="border-b border-white/[0.06] text-white/20">
                     <th className="text-left px-3 py-2 font-normal">Source</th>
                     <th className="text-left px-3 py-2 font-normal">Status</th>
-                    <th className="text-left px-3 py-2 font-normal">New signals</th>
+                    <th className="text-left px-3 py-2 font-normal">New / Dup</th>
+                    <th className="text-left px-3 py-2 font-normal">Duration</th>
                     <th className="text-left px-3 py-2 font-normal">Started</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {runs.map((r) => (
-                    <tr key={r.id} className="border-b border-white/[0.03] last:border-0">
-                      <td className="px-3 py-2 text-white/50">{r.source}</td>
-                      <td className={`px-3 py-2 ${STATUS_COLOR[r.status] || "text-white/30"}`}>
-                        {r.status}
-                      </td>
-                      <td className="px-3 py-2 text-white/30">
-                        {r.signals_new != null ? `+${r.signals_new}` : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-white/20">
-                        {r.started_at ? new Date(r.started_at).toLocaleString() : "—"}
-                      </td>
-                    </tr>
-                  ))}
+                  {runs.map((r) => {
+                    const duration = r.started_at && r.finished_at
+                      ? `${((new Date(r.finished_at).getTime() - new Date(r.started_at).getTime()) / 1000).toFixed(1)}s`
+                      : "—";
+                    return (
+                      <tr key={r.id} className="border-b border-white/[0.03] last:border-0">
+                        <td className="px-3 py-2 text-white/50">{r.source}</td>
+                        <td className={`px-3 py-2 ${STATUS_COLOR[r.status] || "text-white/30"}`}>
+                          {r.status}
+                          {r.error && (
+                            <span className="ml-1 text-red-400/60" title={r.error}>⚠</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-white/30">
+                          {r.signals_new != null ? `+${r.signals_new} / ${r.signals_dup ?? 0}` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-white/20">{duration}</td>
+                        <td className="px-3 py-2 text-white/20">
+                          {r.started_at ? new Date(r.started_at).toLocaleString() : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
           </div>
         )}
       </div>
+
+      {/* Signal source breakdown */}
+      {signals.length > 0 && (() => {
+        const bySource: Record<string, number> = {};
+        signals.forEach((s) => { bySource[s.source] = (bySource[s.source] || 0) + 1; });
+        return (
+          <div className="flex items-center gap-3 text-xs text-white/20">
+            <span>Sources:</span>
+            {Object.entries(bySource).map(([src, count]) => (
+              <span key={src}>{src} <span className="text-white/40">{count}</span></span>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Signal type filter */}
       <div className="flex items-center gap-1.5">

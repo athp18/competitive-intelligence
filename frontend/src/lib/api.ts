@@ -27,8 +27,13 @@ export const api = {
     const qs = params ? "?" + new URLSearchParams(params) : "";
     return apiFetch(`/runs${qs}`);
   },
-  triggerRun: (targetId: string) =>
-    apiFetch(`/runs/trigger/${targetId}`, { method: "POST" }),
+  triggerRun: (targetId: string, options?: { source?: string; deep?: boolean }) => {
+    const params = new URLSearchParams();
+    if (options?.source) params.set("source", options.source);
+    if (options?.deep !== undefined) params.set("deep", String(options.deep));
+    const qs = params.toString() ? `?${params}` : "";
+    return apiFetch(`/runs/trigger/${targetId}${qs}`, { method: "POST" });
+  },
   query: (q: string) =>
     apiFetch("/query", { method: "POST", body: JSON.stringify({ q }) }),
   createTarget: (data: object) =>

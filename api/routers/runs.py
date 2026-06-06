@@ -24,10 +24,15 @@ def _serialize(r) -> dict:
 
 
 @router.post("/trigger/{target_id}", dependencies=[Depends(verify_api_key)])
-async def trigger(target_id: UUID, db: AsyncSession = Depends(get_db)):
+async def trigger(
+    target_id: UUID,
+    source: str | None = Query(None),
+    deep: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
     from agents.orchestrator import Orchestrator
     orchestrator = Orchestrator()
-    run_ids = await orchestrator.spawn_single(target_id)
+    run_ids = await orchestrator.spawn_single(target_id, source=source, deep=deep)
     return {"run_ids": [str(r) for r in run_ids]}
 
 
