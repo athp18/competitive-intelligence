@@ -142,6 +142,7 @@ class ExtractionAgent:
                 ),
                 model=MODEL_HAIKU,
                 caller="extraction_agent",
+                max_tokens=2048,
             )
             return self.llm.extract_json(response)
         except Exception as e:

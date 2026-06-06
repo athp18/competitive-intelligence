@@ -36,7 +36,13 @@ class NewsSubAgent(BaseScraperAgent):
 
         try:
             resp = await self.get(f"{NEWS_API}/everything", params=params)
-            for article in resp.json().get("articles", []):
+            data = resp.json()
+            if data.get("status") != "ok":
+                log.warning("newsapi_error", query=query, code=data.get("code"), message=data.get("message"))
+                return []
+            articles = data.get("articles", [])
+            log.info("newsapi_results", query=query, total=data.get("totalResults", 0), returned=len(articles))
+            for article in articles:
                 items.append({
                     "type": "news_article",
                     "title": article.get("title", ""),

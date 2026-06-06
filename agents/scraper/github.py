@@ -29,6 +29,9 @@ class GitHubSubAgent(BaseScraperAgent):
         org = config.get("org")
 
         if org:
+            # Normalize: strip full GitHub URL if stored as https://github.com/orgname
+            if isinstance(org, str) and "github.com/" in org:
+                org = org.rstrip("/").split("github.com/")[-1].split("/")[0]
             results += await self._fetch_org(org, headers, deep=initial)
         elif repo:
             results += await self._fetch_repo(repo, headers, commits=100 if initial else 20)
